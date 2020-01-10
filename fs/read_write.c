@@ -62,6 +62,7 @@ int sys_lseek(unsigned int fd, off_t offset, unsigned int origin)
 	if (tmp < 0)
 		return -EINVAL;
 	file->f_pos = tmp;
+	file->f_reada = 0;
 	return file->f_pos;
 }
 

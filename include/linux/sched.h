@@ -222,6 +222,7 @@ extern int jiffies_offset;
 
 extern void add_timer(long jiffies, void (*fn)(void));
 extern void sleep_on(struct task_struct ** p);
+extern int send_sig(long sig,struct task_struct * p,int priv);
 extern void interruptible_sleep_on(struct task_struct ** p);
 extern void wake_up(struct task_struct ** p);
 extern int in_group_p(gid_t grp);

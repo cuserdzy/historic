@@ -105,14 +105,27 @@ static int pipe_ioctl(struct inode *pino, struct file * filp,
 	}
 }
 
+/*
+ * Ok, these two routines should keep track of readers/writers,
+ * but it's currently done with the inode->i_count checking.
+ */
+static void pipe_read_release(struct inode * inode, struct file * filp)
+{
+}
+
+static void pipe_write_release(struct inode * inode, struct file * filp)
+{
+}
+
 static struct file_operations read_pipe_fops = {
 	pipe_lseek,
 	pipe_read,
 	bad_pipe_rw,
 	pipe_readdir,
-	NULL,		/* pipe_close */
 	NULL,		/* pipe_select */
-	pipe_ioctl
+	pipe_ioctl,
+	NULL,		/* no special open code */
+	pipe_read_release
 };
 
 static struct file_operations write_pipe_fops = {
@@ -120,9 +133,10 @@ static struct file_operations write_pipe_fops = {
 	bad_pipe_rw,
 	pipe_write,
 	pipe_readdir,
-	NULL,		/* pipe_close */
 	NULL,		/* pipe_select */
-	pipe_ioctl
+	pipe_ioctl,
+	NULL,		/* no special open code */
+	pipe_write_release
 };
 
 int sys_pipe(unsigned long * fildes)

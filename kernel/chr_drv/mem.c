@@ -215,19 +215,15 @@ static int mem_write(struct inode * inode, struct file * file, char * buf, int c
 	}
 }
 
-static int mem_readdir(struct inode * inode, struct file * file, struct dirent * de, int count)
-{
-	return -ENOTDIR;
-}
-
 static struct file_operations mem_fops = {
 	mem_lseek,
 	mem_read,
 	mem_write,
-	mem_readdir,
-	NULL,		/* mem_close */
+	NULL,		/* mem_readdir */
 	NULL,		/* mem_select */
-	NULL		/* mem_ioctl */
+	NULL,		/* mem_ioctl */
+	NULL,		/* no special open code */
+	NULL		/* no special release code */
 };
 
 void chr_dev_init(void)

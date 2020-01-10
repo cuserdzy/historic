@@ -70,7 +70,8 @@ static int find_empty_process(void)
 	int i;
 
 	repeat:
-		if ((++last_pid)<0) last_pid=1;
+		if ((++last_pid) & 0xffff0000)
+			last_pid=1;
 		for(i=0 ; i<NR_TASKS ; i++)
 			if (task[i] && ((task[i]->pid == last_pid) ||
 				        (task[i]->pgrp == last_pid)))

@@ -167,10 +167,6 @@ struct inode * _namei(const char * pathname, struct inode * base,
 		inode = follow_link(base,inode);
 	else
 		iput(base);
-	if (inode) {
-		inode->i_atime=CURRENT_TIME;
-		inode->i_dirt=1;
-	}
 	return inode;
 }
 

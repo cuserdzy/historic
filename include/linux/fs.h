@@ -20,9 +20,11 @@
  * 5 - /dev/tty
  * 6 - /dev/lp
  * 7 - unnamed pipes
+ * 8 - /dev/sd
+ * 9 - /dev/st
  */
 
-#define IS_SEEKABLE(x) ((x)>=1 && (x)<=3)
+#define IS_SEEKABLE(x) ((x)>=1 && (x)<=3 || (x)==8)
 
 #define MAY_EXEC 1
 #define MAY_WRITE 2
@@ -81,6 +83,7 @@ struct buffer_head {
 	struct buffer_head * b_next;
 	struct buffer_head * b_prev_free;
 	struct buffer_head * b_next_free;
+	struct buffer_head * b_reqnext;
 };
 
 struct inode {
@@ -113,6 +116,7 @@ struct file {
 	unsigned short f_mode;
 	unsigned short f_flags;
 	unsigned short f_count;
+	unsigned short f_reada;
 	struct inode * f_inode;
 	struct file_operations * f_op;
 	off_t f_pos;
@@ -159,12 +163,14 @@ struct file_operations {
 	int (*read) (struct inode *, struct file *, char *, int);
 	int (*write) (struct inode *, struct file *, char *, int);
 	int (*readdir) (struct inode *, struct file *, struct dirent *, int count);
-	int (*close) (struct inode *, struct file *);
 	int (*select) (struct inode *, struct file *, int, select_table *);
 	int (*ioctl) (struct inode *, struct file *, unsigned int, unsigned int);
+	int (*open) (struct inode *, struct file *);
+	void (*release) (struct inode *, struct file *);
 };
 
 struct inode_operations {
+	struct file_operations * default_file_ops;
 	int (*create) (struct inode *,const char *,int,int,struct inode **);
 	int (*lookup) (struct inode *,const char *,int,struct inode **);
 	int (*link) (struct inode *,struct inode *,const char *,int);
@@ -175,18 +181,15 @@ struct inode_operations {
 	int (*mknod) (struct inode *,const char *,int,int,int);
 	int (*rename) (struct inode *,const char *,int,struct inode *,const char *,int);
 	int (*readlink) (struct inode *,char *,int);
-	int (*open) (struct inode *, struct file *);
-	void (*release) (struct inode *, struct file *);
 	struct inode * (*follow_link) (struct inode *, struct inode *);
 	int (*bmap) (struct inode *,int);
 	void (*truncate) (struct inode *);
-	/* added by entropy */
-	void (*write_inode)(struct inode *inode);
-	void (*put_inode)(struct inode *inode);
 };
 
 struct super_operations {
 	void (*read_inode)(struct inode *inode);
+	void (*write_inode) (struct inode *inode);
+	void (*put_inode) (struct inode *inode);
 	void (*put_super)(struct super_block *sb);
 };
 
@@ -211,7 +214,6 @@ extern int floppy_change(struct buffer_head * first_block);
 extern int ticks_to_floppy_on(unsigned int dev);
 extern void floppy_on(unsigned int dev);
 extern void floppy_off(unsigned int dev);
-extern void truncate(struct inode * inode);
 extern void sync_inodes(void);
 extern void wait_on(struct inode * inode);
 extern int bmap(struct inode * inode,int block);

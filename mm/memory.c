@@ -355,7 +355,7 @@ static unsigned long put_page(unsigned long page,unsigned long address)
 		return 0;
 	}
 	if (mem_map[(page-LOW_MEM)>>12] != 1) {
-		printk("mem_map disagrees with %p at %p\n",page,address);
+		printk("put_page: mem_map disagrees with %p at %p\n",page,address);
 		return 0;
 	}
 	page_table = (unsigned long *) ((address>>20) & 0xffc);
@@ -588,14 +588,39 @@ static int share_page(struct inode * inode, unsigned long address)
 	return 0;
 }
 
+/*
+ * fill in an empty page or directory if none exists
+ */
+static unsigned long get_empty(unsigned long * p)
+{
+	unsigned long page = 0;
+
+repeat:
+	if (1 & *p) {
+		free_page(page);
+		return *p;
+	}
+	if (*p) {
+		printk("get_empty: bad page entry \n");
+		*p = 0;
+	}
+	if (page) {
+		*p = page | 7;
+		return *p;
+	}
+	if (!(page = get_free_page()))
+		oom();
+	goto repeat;
+}
+
 void do_no_page(unsigned long error_code, unsigned long address,
-	struct task_struct *tsk)
+	struct task_struct *tsk, unsigned long user_esp)
 {
 	static unsigned int last_checked = 0;
 	int nr[4];
 	unsigned long tmp;
 	unsigned long page;
-	int block,i;
+	unsigned int block,i;
 	struct inode * inode;
 
 	/* Thrashing ? Make it interruptible, but don't penalize otherwise */
@@ -616,54 +641,50 @@ void do_no_page(unsigned long error_code, unsigned long address,
 		printk("Bad things happen: nonexistent page error in do_no_page\n\r");
 		do_exit(SIGSEGV);
 	}
+	page = get_empty((unsigned long *) ((address >> 20) & 0xffc));
+	page &= 0xfffff000;
+	page += (address >> 10) & 0xffc;
+	tmp = *(unsigned long *) page;
+	if (tmp & 1) {
+		printk("bogus do_no_page\n");
+		return;
+	}
 	++tsk->rss;
-	page = *(unsigned long *) ((address >> 20) & 0xffc);
-/* check the page directory: make a page dir entry if no such exists */
-	if (page & 1) {
-		page &= 0xfffff000;
-		page += (address >> 10) & 0xffc;
-		tmp = *(unsigned long *) page;
-		if (tmp && !(1 & tmp)) {
-			++tsk->maj_flt;
-			swap_in((unsigned long *) page);
-			return;
-		}
-	} else {
-		if (page)
-			printk("do_no_page: bad page directory\n");
-		if (!(page = get_free_page()))
-			oom();
-		page |= 7;
-		*(unsigned long *) ((address >> 20) & 0xffc) = page;
+	if (tmp) {
+		++tsk->maj_flt;
+		swap_in((unsigned long *) page);
+		return;
 	}
 	address &= 0xfffff000;
 	tmp = address - tsk->start_code;
-	if (tmp >= LIBRARY_OFFSET ) {
-		inode = NULL;
-		block = 1;
-		i = tsk->numlibraries;
-		while (i-- > 0) {
-			if (tmp < (tsk->libraries[i].start +
-			   tsk->libraries[i].length)) {	
-				inode = tsk->libraries[i].library;
-				block = 1 + (tmp - tsk->libraries[i].start) / 
-					BLOCK_SIZE;
-				break;
-			}
-		}
-	} else if (tmp < tsk->end_data) {
+	inode = NULL;
+	block = 0;
+	if (tmp < tsk->end_data) {
 		inode = tsk->executable;
 		block = 1 + tmp / BLOCK_SIZE;
 	} else {
-		inode = NULL;
-		block = 0;
+		i = tsk->numlibraries;
+		while (i-- > 0) {
+			if (tmp < tsk->libraries[i].start)
+				continue;
+			block = tmp - tsk->libraries[i].start;
+			if (block >= tsk->libraries[i].length)
+				continue;
+			inode = tsk->libraries[i].library;
+			block = 1 + block / BLOCK_SIZE;
+			break;
+		}
 	}
 	if (!inode) {
 		++tsk->min_flt;
-		if (tmp < LIBRARY_OFFSET && tmp > tsk->brk && tsk == current && 
-			LIBRARY_OFFSET - tmp > tsk->rlim[RLIMIT_STACK].rlim_max)
-				do_exit(SIGSEGV);
 		get_empty_page(address);
+		if (tsk != current)
+			return;
+		if (tmp >= LIBRARY_OFFSET || tmp < tsk->brk)
+			return;
+		if (tmp+8192 >= (user_esp & 0xfffff000))
+			return;
+		send_sig(SIGSEGV,tsk,1);
 		return;
 	}
 	if (tsk == current)
@@ -674,7 +695,6 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	++tsk->maj_flt;
 	if (!(page = get_free_page()))
 		oom();
-/* remember that 1 block is used for header */
 	for (i=0 ; i<4 ; block++,i++)
 		nr[i] = bmap(inode,block);
 	bread_page(page,inode->i_dev,nr);
@@ -682,7 +702,7 @@ void do_no_page(unsigned long error_code, unsigned long address,
 	if (i>4095)
 		i = 0;
 	tmp = page + 4096;
-	while (i-- > 0) {
+	while (i--) {
 		tmp--;
 		*(char *)tmp = 0;
 	}
@@ -763,11 +783,16 @@ void show_mem(void)
 void do_page_fault(unsigned long *esp, unsigned long error_code)
 {
 	unsigned long address;
-	/* get the address */
+	unsigned long user_esp;
 
+	if ((0xffff & esp[1]) == 0xf)
+		user_esp = esp[3];
+	else
+		user_esp = 0;
+	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
 	if (!(error_code & 1)) {
-		do_no_page(error_code, address, current);
+		do_no_page(error_code, address, current, user_esp);
 		return;
 	} else {
 		do_wp_page(error_code, address);

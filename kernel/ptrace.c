@@ -29,7 +29,7 @@
  */
 #define MAGICNUMBER 68
 
-void do_no_page(unsigned long, unsigned long, struct task_struct *);
+void do_no_page(unsigned long, unsigned long, struct task_struct *, unsigned long);
 void write_verify(unsigned long);
 
 /* change a pid into a task struct. */
@@ -100,7 +100,7 @@ repeat:
 		page = *((unsigned long *) page);
 	}
 	if (!(page & PAGE_PRESENT)) {
-		do_no_page(0,addr,tsk);
+		do_no_page(0,addr,tsk,0);
 		goto repeat;
 	}
 	page &= 0xfffff000;
@@ -129,7 +129,7 @@ repeat:
 		page = *((unsigned long *) page);
 	}
 	if (!(page & PAGE_PRESENT)) {
-		do_no_page(0,addr,tsk);
+		do_no_page(0,addr,tsk,0);
 		goto repeat;
 	}
 	if (!(page & PAGE_RW)) {

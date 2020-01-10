@@ -88,7 +88,8 @@ ENOSYS = 38
 .globl _invalid_TSS,_segment_not_present,_stack_segment
 .globl _general_protection,_irq13,_reserved
 .globl _alignment_check,_page_fault
-.globl _keyboard_interrupt
+.globl _keyboard_interrupt,_hd_interrupt
+.globl _IRQ3_interrupt,_IRQ4_interrupt
 
 #define SAVE_ALL \
 	cld; \
@@ -124,15 +125,15 @@ ENOSYS = 38
 	inb $0xA1,%al; \
 	jmp 1f; \
 1:	jmp 1f; \
-1:	orb $mask,%al; \
+1:	orb $(mask),%al; \
 	outb %al,$0xA1; \
 	jmp 1f; \
 1:	jmp 1f; \
 1:	movb $0x20,%al; \
-	outb %al,$0x20
+	outb %al,$0xA0 \
 	jmp 1f; \
 1:	jmp 1f; \
-1:	outb %al,$0xA0
+1:	outb %al,$0x20
 
 #define UNBLK_FIRST(mask) \
 	inb $0x21,%al; \
@@ -172,6 +173,8 @@ ret_from_sys_call:
 1:	movl _current,%eax
 	cmpl _task,%eax			# task[0] cannot have signals
 	je 2f
+	cmpl $0,_need_resched
+	jne reschedule
 	cmpl $0,state(%eax)		# state
 	jne reschedule
 	cmpl $0,counter(%eax)		# counter
@@ -239,25 +242,65 @@ _device_not_available:
 _keyboard_interrupt:
 	pushl $-1
 	SAVE_ALL
-	ACK_FIRST(2)
+	ACK_FIRST(0x02)
 	sti
 	call _do_keyboard
 	cli
-	UNBLK_FIRST(2)
+	UNBLK_FIRST(0x02)
+	jmp ret_from_sys_call
+
+.align 2
+_IRQ3_interrupt:
+	pushl $-1
+	SAVE_ALL
+	ACK_FIRST(0x08)
+	sti
+	call _do_IRQ3
+	cli
+	UNBLK_FIRST(0x08)
+	jmp ret_from_sys_call
+
+.align 2
+_IRQ4_interrupt:
+	pushl $-1
+	SAVE_ALL
+	ACK_FIRST(0x10)
+	sti
+	call _do_IRQ4
+	cli
+	UNBLK_FIRST(0x10)
 	jmp ret_from_sys_call
 
 .align 2
 _timer_interrupt:
 	pushl $-1		# mark this as an int
 	SAVE_ALL
+	ACK_FIRST(0x01)
+	sti
 	incl _jiffies
-	movb $0x20,%al		# EOI to interrupt controller #1
-	outb %al,$0x20
 	movl CS(%esp),%eax
 	andl $3,%eax		# %eax is CPL (0 or 3, 0=supervisor)
 	pushl %eax
 	call _do_timer		# 'do_timer(long CPL)' does everything from
 	addl $4,%esp		# task switching to accounting ...
+	cli
+	UNBLK_FIRST(0x01)
+	jmp ret_from_sys_call
+
+.align 2
+_hd_interrupt:
+	pushl $-1
+	SAVE_ALL
+	ACK_SECOND(0x40)
+	andl $0xfffeffff,_timer_active
+	xorl %edx,%edx
+	xchgl _do_hd,%edx
+	testl %edx,%edx
+	jne 1f
+	movl $_unexpected_hd_interrupt,%edx
+1:	call *%edx		# "interesting" way of handling intr.
+	cli
+	UNBLK_SECOND(0x40)
 	jmp ret_from_sys_call
 
 .align 2

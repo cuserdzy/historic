@@ -52,9 +52,10 @@ static struct file_operations rd_fops = {
 	block_read,		/* read - general block-dev read */
 	block_write,		/* write - general block-dev write */
 	NULL,			/* readdir - bad */
-	NULL,			/* close - default */
 	NULL,			/* select */
-	NULL			/* ioctl */
+	NULL,			/* ioctl */
+	NULL,			/* no special open code */
+	NULL			/* no special release code */
 };
 
 /*

@@ -62,7 +62,7 @@ int sys_uselib(const char * library)
 		inode = NULL;
 	if (!inode)
 		return -ENOENT;
-	if (!S_ISREG(inode->i_mode) || !permission(inode,MAY_READ|MAY_EXEC)) {
+	if (!S_ISREG(inode->i_mode) || !permission(inode,MAY_READ)) {
 		iput(inode);
 		return -EACCES;
 	}
@@ -229,6 +229,32 @@ static unsigned long change_ldt(unsigned long text_size,unsigned long * page)
 	return data_limit;
 }
 
+static void read_omagic(struct inode *inode, int bytes)
+{
+	struct buffer_head *bh;
+	int n, blkno, blk = 0;
+	char *dest = (char *) 0;
+
+	while (bytes > 0) {
+		if (!(blkno = bmap(inode, blk)))
+			sys_exit(-1);
+		if (!(bh = bread(inode->i_dev, blkno)))
+			sys_exit(-1);
+		n = (blk ? BLOCK_SIZE : BLOCK_SIZE - sizeof(struct exec));
+		if (bytes < n)
+			n = bytes;
+
+		memcpy_tofs(dest, (blk ? bh->b_data :
+				bh->b_data + sizeof(struct exec)), n);
+		brelse(bh);
+		++blk;
+		dest += n;
+		bytes -= n;
+	}
+	iput(inode);
+	current->executable = NULL;
+}
+
 /*
  * 'do_execve()' executes a new program.
  *
@@ -359,13 +385,14 @@ restart_interp:
 		goto restart_interp;
 	}
 	brelse(bh);
-	if (N_MAGIC(ex) != ZMAGIC || ex.a_trsize || ex.a_drsize ||
+	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC) ||
+		ex.a_trsize || ex.a_drsize ||
 		ex.a_text+ex.a_data+ex.a_bss>0x3000000 ||
 		inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
 		retval = -ENOEXEC;
 		goto exec_error2;
 	}
-	if (N_TXTOFF(ex) != BLOCK_SIZE) {
+	if (N_TXTOFF(ex) != BLOCK_SIZE && N_MAGIC(ex) != OMAGIC) {
 		printk("%s: N_TXTOFF != BLOCK_SIZE. See a.out.h.", filename);
 		retval = -ENOEXEC;
 		goto exec_error2;
@@ -422,6 +449,8 @@ restart_interp:
 	current->rss = (LIBRARY_OFFSET - p + PAGE_SIZE-1) / PAGE_SIZE;
 	current->suid = current->euid = e_uid;
 	current->sgid = current->egid = e_gid;
+	if (N_MAGIC(ex) == OMAGIC)
+		read_omagic(inode, ex.a_text+ex.a_data);
 	eip[0] = ex.a_entry;		/* eip, magic happens :-) */
 	eip[3] = p;			/* stack pointer */
 	if (current->flags & PF_PTRACED)

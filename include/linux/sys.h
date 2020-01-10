@@ -104,6 +104,8 @@ extern int sys_profil();
 extern int sys_statfs();
 extern int sys_fstatfs();
 extern int sys_ioperm();
+extern int sys_socketcall();
+extern int sys_syslog();
 
 fn_ptr sys_call_table[] = { sys_setup, sys_exit, sys_fork, sys_read,
 sys_write, sys_open, sys_close, sys_waitpid, sys_creat, sys_link,
@@ -123,7 +125,8 @@ sys_gettimeofday,  sys_settimeofday, sys_getgroups, sys_setgroups,
 sys_select, sys_symlink, sys_lstat, sys_readlink, sys_uselib,
 sys_swapon, sys_reboot, sys_readdir, sys_mmap, sys_munmap,
 sys_truncate, sys_ftruncate, sys_fchmod, sys_fchown, sys_getpriority,
-sys_setpriority, sys_profil, sys_statfs, sys_fstatfs, sys_ioperm };
+sys_setpriority, sys_profil, sys_statfs, sys_fstatfs, sys_ioperm,
+sys_socketcall, sys_syslog };
 
 /* So we don't have to do any more manual updating.... */
 int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);

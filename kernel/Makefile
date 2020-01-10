@@ -62,7 +62,7 @@ exit.s exit.o : exit.c ../include/errno.h ../include/signal.h ../include/sys/typ
   ../include/sys/wait.h ../include/linux/sched.h ../include/linux/head.h ../include/linux/fs.h \
   ../include/sys/dirent.h ../include/limits.h ../include/linux/mm.h ../include/linux/kernel.h \
   ../include/sys/param.h ../include/sys/time.h ../include/time.h ../include/sys/resource.h \
-  ../include/linux/tty.h ../include/termios.h ../include/asm/segment.h 
+  ../include/linux/tty.h ../include/asm/system.h ../include/termios.h ../include/asm/segment.h 
 fork.s fork.o : fork.c ../include/errno.h ../include/stddef.h ../include/linux/sched.h \
   ../include/linux/head.h ../include/linux/fs.h ../include/sys/types.h ../include/sys/dirent.h \
   ../include/limits.h ../include/linux/mm.h ../include/linux/kernel.h ../include/signal.h \
@@ -77,7 +77,11 @@ panic.s panic.o : panic.c ../include/linux/kernel.h ../include/linux/sched.h ../
   ../include/linux/fs.h ../include/sys/types.h ../include/sys/dirent.h ../include/limits.h \
   ../include/linux/mm.h ../include/signal.h ../include/sys/param.h ../include/sys/time.h \
   ../include/time.h ../include/sys/resource.h 
-printk.s printk.o : printk.c ../include/stdarg.h ../include/stddef.h ../include/linux/kernel.h 
+printk.s printk.o : printk.c ../include/stdarg.h ../include/stddef.h ../include/errno.h \
+  ../include/asm/segment.h ../include/asm/system.h ../include/linux/sched.h ../include/linux/head.h \
+  ../include/linux/fs.h ../include/sys/types.h ../include/sys/dirent.h ../include/limits.h \
+  ../include/linux/mm.h ../include/linux/kernel.h ../include/signal.h ../include/sys/param.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/resource.h 
 ptrace.s ptrace.o : ptrace.c ../include/linux/head.h ../include/linux/kernel.h ../include/linux/sched.h \
   ../include/linux/fs.h ../include/sys/types.h ../include/sys/dirent.h ../include/limits.h \
   ../include/linux/mm.h ../include/signal.h ../include/sys/param.h ../include/sys/time.h \
@@ -98,9 +102,9 @@ sys.s sys.o : sys.c ../include/errno.h ../include/linux/sched.h ../include/linux
   ../include/linux/fs.h ../include/sys/types.h ../include/sys/dirent.h ../include/limits.h \
   ../include/linux/mm.h ../include/linux/kernel.h ../include/signal.h ../include/sys/param.h \
   ../include/sys/time.h ../include/time.h ../include/sys/resource.h ../include/linux/tty.h \
-  ../include/termios.h ../include/linux/config.h ../include/linux/config_rel.h \
-  ../include/linux/config_ver.h ../include/asm/segment.h ../include/sys/times.h \
-  ../include/sys/utsname.h ../include/linux/string.h 
+  ../include/asm/system.h ../include/termios.h ../include/linux/config.h ../include/linux/config_rel.h \
+  ../include/linux/config_ver.h ../include/linux/config.dist.h ../include/asm/segment.h \
+  ../include/sys/times.h ../include/sys/utsname.h ../include/linux/string.h 
 traps.s traps.o : traps.c ../include/linux/string.h ../include/linux/head.h ../include/linux/sched.h \
   ../include/linux/fs.h ../include/sys/types.h ../include/sys/dirent.h ../include/limits.h \
   ../include/linux/mm.h ../include/linux/kernel.h ../include/signal.h ../include/sys/param.h \

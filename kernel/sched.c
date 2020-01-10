@@ -22,6 +22,8 @@
 #include <signal.h>
 #include <errno.h>
 
+int need_resched = 0;
+
 #define _S(nr) (1<<((nr)-1))
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
@@ -124,6 +126,7 @@ void schedule(void)
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
+	need_resched = 0;
 	for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if (*p) {
 			if ((*p)->timeout && (*p)->timeout < jiffies)
@@ -178,6 +181,10 @@ int sys_pause(void)
 	return -EINTR;
 }
 
+/*
+ * wake_up doesn't wake up stopped processes - they have to be awakened
+ * with signals or similar.
+ */
 void wake_up(struct task_struct **p)
 {
 	struct task_struct * wakeup_ptr, * tmp;
@@ -186,12 +193,13 @@ void wake_up(struct task_struct **p)
 		wakeup_ptr = *p;
 		*p = NULL;
 		while (wakeup_ptr && wakeup_ptr != task[0]) {
-			if (wakeup_ptr->state == TASK_STOPPED)
-				printk("wake_up: TASK_STOPPED\n");
-			else if (wakeup_ptr->state == TASK_ZOMBIE)
+			if (wakeup_ptr->state == TASK_ZOMBIE)
 				printk("wake_up: TASK_ZOMBIE\n");
-			else
+			else if (wakeup_ptr->state != TASK_STOPPED) {
 				wakeup_ptr->state = TASK_RUNNING;
+				if (wakeup_ptr->counter > current->counter)
+					need_resched = 1;
+			}
 			tmp = wakeup_ptr->next_wait;
 			wakeup_ptr->next_wait = task[0];
 			wakeup_ptr = tmp;
@@ -333,6 +341,34 @@ void add_timer(long jiffies, void (*fn)(void))
 	sti();
 }
 
+#define	FSHIFT	11
+#define	FSCALE	(1<<FSHIFT)
+/*
+ * Constants for averages over 1, 5, and 15 minutes
+ * when sampling at 5 second intervals.
+ */
+static unsigned long cexp[3] = {
+	1884,	/* 0.9200444146293232 * FSCALE,	 exp(-1/12) */
+	2014,	/* 0.9834714538216174 * FSCALE,	 exp(-1/60) */
+	2037,	/* 0.9944598480048967 * FSCALE,	 exp(-1/180) */
+};
+unsigned long averunnable[3];	/* fixed point numbers */
+
+void update_avg(void)
+{
+    	int i, n=0;
+	struct task_struct **p;
+
+	for(p = &LAST_TASK; p > &FIRST_TASK; --p)
+		if (*p && ((*p)->state == TASK_RUNNING || 
+			   (*p)->state == TASK_UNINTERRUPTIBLE))
+			++n;
+	
+	for (i = 0; i < 3; ++i)
+		averunnable[i] = (cexp[i] * averunnable[i] +
+			n * FSCALE * (FSCALE - cexp[i])) >> FSHIFT;
+}
+
 unsigned long timer_active = 0;
 struct timer_struct timer_table[32];
 
@@ -340,6 +376,7 @@ void do_timer(long cpl)
 {
 	unsigned long mask;
 	struct timer_struct *tp = timer_table+0;
+	static int avg_cnt;
 
 	for (mask = 1 ; mask ; tp++,mask += mask) {
 		if (mask > timer_active)
@@ -350,6 +387,7 @@ void do_timer(long cpl)
 			continue;
 		timer_active &= ~mask;
 		tp->fn();
+		sti();
 	}
 
 	if (cpl)
@@ -370,10 +408,14 @@ void do_timer(long cpl)
 	}
 	if (current_DOR & 0xf0)
 		do_floppy_timer();
-	if ((--current->counter)>0) return;
-	current->counter=0;
-	if (!cpl) return;
-	schedule();
+	if (--avg_cnt < 0) {
+		avg_cnt = 500;
+		update_avg();
+	}
+	if ((--current->counter)<=0) {
+		current->counter=0;
+		need_resched = 1;
+	}
 }
 
 int sys_alarm(long seconds)
@@ -420,7 +462,7 @@ int sys_nice(long increment)
 {
 	if (increment < 0 && !suser())
 		return -EPERM;
-	if (increment > current->priority)
+	if (increment >= current->priority)
 		increment = current->priority-1;
 	current->priority -= increment;
 	return 0;
