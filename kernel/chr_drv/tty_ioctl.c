@@ -6,6 +6,7 @@
 
 #include <errno.h>
 #include <termios.h>
+#include <sys/types.h>
 
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -19,6 +20,7 @@ extern int session_of_pgrp(int pgrp);
 extern int do_screendump(int arg);
 extern int kill_pg(int pgrp, int sig, int priv);
 extern int tty_signal(int sig, struct tty_struct *tty);
+extern int vt_ioctl(struct tty_struct *tty, int dev, int cmd, int arg);
 
 static unsigned short quotient[] = {
 	0, 2304, 1536, 1047, 857,
@@ -203,18 +205,20 @@ static int get_window_size(struct tty_struct * tty, struct winsize * ws)
 	return 0;
 }
 
-int tty_ioctl(int dev, int cmd, int arg)
+int tty_ioctl(struct inode * inode, struct file * file,
+	unsigned int cmd, unsigned int arg)
 {
 	struct tty_struct * tty;
 	struct tty_struct * other_tty;
 	int pgrp;
+	int dev;
 
-	if (MAJOR(dev) == 5) {
+	if (MAJOR(inode->i_rdev) == 5) {
 		dev = current->tty;
 		if (dev<0)
 			return -EINVAL;
 	} else
-		dev=MINOR(dev);
+		dev = MINOR(inode->i_rdev);
 	tty = tty_table + (dev ? ((dev < 64)? dev-1:dev) : fg_console);
 
 	if (IS_A_PTY(dev))
@@ -355,6 +359,6 @@ int tty_ioctl(int dev, int cmd, int arg)
 					return -EINVAL;
 			}
 		default:
-			return -EINVAL;
+			return vt_ioctl(tty, dev, cmd, arg);
 	}
 }

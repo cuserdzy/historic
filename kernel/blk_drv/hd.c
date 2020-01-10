@@ -125,7 +125,7 @@ static void extended_partition(unsigned int dev)
 			       current_minor, hd[current_minor].start_sect, 
 			       hd[current_minor].nr_sects,
 			       hd[current_minor].start_sect + 
-			       hd[current_minor].nr_sects);
+			       hd[current_minor].nr_sects - 1);
 			current_minor++;
 			p++;
 		/*
@@ -171,7 +171,7 @@ static void check_partition(unsigned int dev)
 			hd[minor].start_sect = first_sector + p->start_sect;
 			printk(" part %d start %d size %d end %d \n\r", i, 
 			       hd[minor].start_sect, hd[minor].nr_sects, 
-			       hd[minor].start_sect + hd[minor].nr_sects);
+			       hd[minor].start_sect + hd[minor].nr_sects - 1);
 			if ((current_minor & 0x3f) >= 60)
 				continue;
 			if (p->sys_ind == EXTENDED_PARTITION) {
@@ -196,7 +196,7 @@ static void check_partition(unsigned int dev)
 				       hd[current_minor].start_sect, 
 				       hd[current_minor].nr_sects,
 				       hd[current_minor].start_sect + 
-				       hd[current_minor].nr_sects);
+				       hd[current_minor].nr_sects - 1);
 			}
 		}
 	} else
@@ -519,25 +519,17 @@ static void do_hd_request(void)
 		panic("unknown hd-command");
 }
 
-void hd_init(void)
-{
-	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-	set_intr_gate(0x2E,&hd_interrupt);
-	outb_p(inb_p(0x21)&0xfb,0x21);
-	outb(inb_p(0xA1)&0xbf,0xA1);
-	timer_table[HD_TIMER].fn = hd_times_out;
-}
-
-int hd_ioctl(int dev, int cmd, int arg)
+static int hd_ioctl(struct inode * inode, struct file * file,
+	unsigned int cmd, unsigned int arg)
 {
 	struct hd_geometry *loc = (void *) arg;
+	int dev;
 
-	if (!loc)
+	if (!loc || !inode)
 		return -EINVAL;
-	dev = MINOR(dev) >> 6;
+	dev = MINOR(inode->i_rdev) >> 6;
 	if (dev >= NR_HD)
 		return -EINVAL;
-
 	switch (cmd) {
 		case HDIO_REQ:
 			put_fs_byte(hd_info[dev].head,
@@ -550,4 +542,24 @@ int hd_ioctl(int dev, int cmd, int arg)
 		default:
 			return -EINVAL;
 	}
+}
+
+static struct file_operations hd_fops = {
+	NULL,			/* lseek - default */
+	block_read,		/* read - general block-dev read */
+	block_write,		/* write - general block-dev write */
+	NULL,			/* readdir - bad */
+	NULL,			/* close - default */
+	NULL,			/* select */
+	hd_ioctl		/* ioctl */
+};
+
+void hd_init(void)
+{
+	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blkdev_fops[MAJOR_NR] = &hd_fops;
+	set_intr_gate(0x2E,&hd_interrupt);
+	outb_p(inb_p(0x21)&0xfb,0x21);
+	outb(inb_p(0xA1)&0xbf,0xA1);
+	timer_table[HD_TIMER].fn = hd_times_out;
 }

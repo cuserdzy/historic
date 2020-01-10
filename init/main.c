@@ -25,9 +25,11 @@ static inline _syscall0(int,pause)
 static inline _syscall1(int,setup,void *,BIOS)
 static inline _syscall0(int,sync)
 
-#include <linux/tty.h>
 #include <linux/sched.h>
+#include <linux/tty.h>
 #include <linux/head.h>
+#include <linux/string.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 
@@ -36,10 +38,6 @@ static inline _syscall0(int,sync)
 #include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
-
-#include <linux/fs.h>
-
-#include <string.h>
 
 static char printbuf[1024];
 
@@ -156,9 +154,8 @@ void start_kernel(void)
 #endif
 	mem_init(main_memory_start,memory_end);
 	trap_init();
-	blk_dev_init();
 	chr_dev_init();
-	tty_init();
+	blk_dev_init();
 	time_init();
 	sched_init();
 	buffer_init(buffer_memory_end);

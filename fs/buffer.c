@@ -200,7 +200,8 @@ static inline void insert_into_queues(struct buffer_head * bh)
 		return;
 	bh->b_next = hash(bh->b_dev,bh->b_blocknr);
 	hash(bh->b_dev,bh->b_blocknr) = bh;
-	bh->b_next->b_prev = bh;
+	if (bh->b_next)
+		bh->b_next->b_prev = bh;
 }
 
 static struct buffer_head * find_buffer(int dev, int block)

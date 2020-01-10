@@ -19,7 +19,7 @@
 
 #include <signal.h>
 #include <errno.h>
-#include <string.h>
+#include <linux/string.h>
 #include <sys/stat.h>
 #include <a.out.h>
 
@@ -39,26 +39,57 @@ extern int sys_close(int fd);
  */
 #define MAX_ARG_PAGES 32
 
+/*
+ * Note that a shared library must be both readable and executable due to
+ * security reasons.
+ *
+ * Also note that we take the address to load from from the file itself.
+ */
 int sys_uselib(const char * library)
 {
+#define libnum	(current->numlibraries)
 	struct inode * inode;
-	unsigned long base;
+	struct buffer_head * bh;
+	struct exec ex;
 
 	if (get_limit(0x17) != TASK_SIZE)
 		return -EINVAL;
-	if (library) {
-		if (!(inode=namei(library)))		/* get library inode */
-			return -ENOENT;
-	} else
+	if ((libnum >= MAX_SHARED_LIBS) || (libnum < 0))
+		return -EINVAL;
+	if (library)
+		inode = namei(library);
+	else
 		inode = NULL;
-/* we should check filetypes (headers etc), but we don't */
-	iput(current->library);
-	current->library = NULL;
-	base = get_base(current->ldt[2]);
-	base += LIBRARY_OFFSET;
-	free_page_tables(base,LIBRARY_SIZE);
-	current->library = inode;
+	if (!inode)
+		return -ENOENT;
+	if (!S_ISREG(inode->i_mode) || !permission(inode,MAY_READ|MAY_EXEC)) {
+		iput(inode);
+		return -EACCES;
+	}
+	if (!(bh = bread(inode->i_dev,inode->i_data[0]))) {
+		iput(inode);
+		return -EACCES;
+	}
+	ex = *(struct exec *) bh->b_data;
+	brelse(bh);
+	if (N_MAGIC(ex) != ZMAGIC || ex.a_trsize || ex.a_drsize ||
+		ex.a_text+ex.a_data+ex.a_bss>0x3000000 ||
+		inode->i_size < ex.a_text+ex.a_data+ex.a_syms+N_TXTOFF(ex)) {
+		iput(inode);
+		return -ENOEXEC;
+	}
+	current->libraries[libnum].library = inode;
+	current->libraries[libnum].start = ex.a_entry;
+	current->libraries[libnum].length = (ex.a_data+ex.a_text+0xfff) & 0xfffff000;
+#if 0
+	printk("Loaded library %d at %08x, length %08x\n",
+		libnum,
+		current->libraries[libnum].start,
+		current->libraries[libnum].length);
+#endif
+	libnum++;
 	return 0;
+#undef libnum
 }
 
 /*
@@ -348,7 +379,6 @@ restart_interp:
 		}
 	}
 /* OK, This is the point of no return */
-/* note that current->library stays unchanged by an exec */
 	for (i=0; (ch = get_fs_byte(filename++)) != '\0';)
 		if (ch == '/')
 			i = 0;
@@ -357,9 +387,14 @@ restart_interp:
 				current->comm[i++] = ch;
 	if (i < 8)
 		current->comm[i] = '\0';
-	
 	if (current->executable)
 		iput(current->executable);
+	i = current->numlibraries;
+	while (i-- > 0) {
+		iput(current->libraries[i].library);
+		current->libraries[i].library = NULL;
+	}
+	current->numlibraries = 0;
 	current->executable = inode;
 	current->signal = 0;
 	for (i=0 ; i<32 ; i++) {

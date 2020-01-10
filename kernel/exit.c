@@ -287,8 +287,10 @@ volatile void do_exit(long code)
 	current->root = NULL;
 	iput(current->executable);
 	current->executable = NULL;
-	iput(current->library);
-	current->library = NULL;
+	for (i=0; i<current->numlibraries; i++) {
+		iput(current->libraries[i].library);
+		current->libraries[i].library = NULL;
+	}	
 	current->state = TASK_ZOMBIE;
 	current->exit_code = code;
 	current->rss = 0;

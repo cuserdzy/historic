@@ -4,7 +4,7 @@
  *  (C) 1991  Linus Torvalds
  */
 
-#include <string.h>
+#include <linux/string.h>
 #include <sys/stat.h>
 
 #include <linux/sched.h>

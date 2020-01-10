@@ -9,16 +9,17 @@
 #include <linux/kernel.h>
 #include <linux/tty.h>
 #include <linux/sched.h>
+#include <linux/string.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
-#include <string.h>
+#include <sys/time.h>
+
 #include <const.h>
 #include <errno.h>
-#include <sys/time.h>
 #include <signal.h>
 
 /*
@@ -33,18 +34,6 @@
  * such a loss: sleeping automatically frees interrupts when we aren't in this
  * task.
  */
-
-typedef struct {
-	struct task_struct * old_task;
-	struct task_struct ** wait_address;
-} wait_entry;
-
-typedef struct select_table_struct {
-	int nr, woken;
-	struct task_struct * current;
-	struct select_table_struct * next_table;
-	wait_entry entry[NR_OPEN*3];
-} select_table;
 
 static select_table * sel_tables = NULL;
 

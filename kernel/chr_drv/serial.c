@@ -13,9 +13,10 @@
  * and all interrupts pertaining to serial IO.
  */
 
-#include <linux/tty.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
+#include <linux/tty.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 

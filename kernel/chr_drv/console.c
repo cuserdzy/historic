@@ -40,8 +40,11 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 
-#include <string.h>
+#include <linux/string.h>
 #include <errno.h>
+
+#include <sys/kd.h>
+#include "vt_kern.h"
 
 #define DEF_TERMIOS \
 (struct termios) { \
@@ -79,11 +82,14 @@ static void unblank_screen(void);
 
 int NR_CONSOLES = 0;
 
+extern void vt_init(void);
 extern void keyboard_interrupt(void);
 extern void set_leds(void);
 extern unsigned char kapplic;
 extern unsigned char kleds;
 extern unsigned char kmode;
+extern unsigned char kraw;
+extern unsigned char ke0;
 
 unsigned long	video_num_columns;		/* Number of text columns	*/
 unsigned long	video_num_lines;		/* Number of test lines		*/
@@ -120,6 +126,8 @@ static struct {
 	unsigned char	vc_kbdapplic;
 	unsigned char   vc_kbdleds;
 	unsigned char	vc_kbdmode;
+	unsigned char	vc_kbdraw;
+	unsigned char	vc_kbde0;
 	char *		vc_translate;
 } vc_cons [MAX_CONSOLES];
 
@@ -153,6 +161,8 @@ static int console_blanked = 0;
 #define iscolor		(vc_cons[currcons].vc_iscolor)
 #define kbdapplic	(vc_cons[currcons].vc_kbdapplic)
 #define kbdmode		(vc_cons[currcons].vc_kbdmode)
+#define kbdraw		(vc_cons[currcons].vc_kbdraw)
+#define kbde0		(vc_cons[currcons].vc_kbde0)
 #define kbdleds		(vc_cons[currcons].vc_kbdleds)
 
 int blankinterval = 5*60*HZ;
@@ -970,6 +980,8 @@ void con_init(void)
 	translate = NORM_TRANS;
 	kbdleds = 2;
 	kbdmode = 0;
+	kbdraw = 0;
+	kbde0 = 0;
 	kbdapplic = 0;
         vc_cons[0].vc_bold_attr = -1;
 
@@ -1000,16 +1012,22 @@ void con_init(void)
 	a=inb_p(0x61);
 	outb_p(a|0x80,0x61);
 	outb_p(a,0x61);
+
+	vt_init();
 }
 
 void kbdsave(int new_console)
 {
 	int currcons = fg_console;
 	kbdmode = kmode;
+	kbdraw = kraw;
+	kbde0 = ke0;
 	kbdleds = kleds;
 	kbdapplic = kapplic;
 	currcons = new_console;
 	kmode = (kmode & 0x3F) | (kbdmode & 0xC0);
+	kraw = kbdraw;
+	ke0 = kbde0;
 	kleds = kbdleds;
 	kapplic = kbdapplic;
 	set_leds();
@@ -1120,6 +1138,8 @@ void console_print(const char * b)
 
 	if (currcons<0 || currcons>=NR_CONSOLES)
 		currcons = 0;
+	if (vt_info[currcons].mode == KD_GRAPHICS)
+		return;	/* no output in graphics mode */
 	while (c = *(b++)) {
 		if (c == 10) {
 			cr(currcons);

@@ -552,11 +552,22 @@ static int floppy_sizes[] ={
 	1440,1440,1440,1440
 };
 
+static struct file_operations floppy_fops = {
+	NULL,			/* lseek - default */
+	block_read,		/* read - general block-dev read */
+	block_write,		/* write - general block-dev write */
+	NULL,			/* readdir - bad */
+	NULL,			/* close - default */
+	NULL,			/* select */
+	NULL			/* ioctl */
+};
+
 void floppy_init(void)
 {
 	outb(current_DOR,FD_DOR);
 	blk_size[MAJOR_NR] = floppy_sizes;
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blkdev_fops[MAJOR_NR] = &floppy_fops;
 	set_intr_gate(0x26,&floppy_interrupt);
 	outb(inb_p(0x21)&~0x40,0x21);
 }

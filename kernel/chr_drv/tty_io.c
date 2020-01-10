@@ -11,7 +11,7 @@
  * Kill-line thanks to John T Kohl, who also corrected VMIN = VTIME = 0.
  */
 
-#include <ctype.h>
+#include <linux/ctype.h>
 #include <errno.h>
 #include <signal.h>
 #include <unistd.h>
@@ -272,7 +272,7 @@ int tty_signal(int sig, struct tty_struct *tty)
 					/* (but restart after we continue) */
 }
 
-int tty_read(unsigned channel, char * buf, int nr, unsigned short flags)
+static int read_chan(unsigned int channel, struct file * file, char * buf, int nr)
 {
 	struct tty_struct * tty;
 	struct tty_struct * other_tty = NULL;
@@ -304,7 +304,7 @@ int tty_read(unsigned channel, char * buf, int nr, unsigned short flags)
 			current->timeout = time + jiffies;
 		time = 0;
 	}
-	if (flags & O_NONBLOCK)
+	if (file->f_flags & O_NONBLOCK)
 		time = current->timeout = 0;
 	if (minimum>nr)
 		minimum = nr;
@@ -355,12 +355,12 @@ int tty_read(unsigned channel, char * buf, int nr, unsigned short flags)
 		return b-buf;
 	if (current->signal & ~current->blocked)
 		return -ERESTARTSYS;
-	if (flags & O_NONBLOCK)
+	if (file->f_flags & O_NONBLOCK)
 		return -EAGAIN;
 	return 0;
 }
 
-int tty_write(unsigned channel, char * buf, int nr)
+static int write_chan(unsigned int channel, struct file * file, char * buf, int nr)
 {
 	static cr_flag=0;
 	struct tty_struct * tty;
@@ -412,14 +412,62 @@ int tty_write(unsigned channel, char * buf, int nr)
 	return 0;
 }
 
-void chr_dev_init(void)
+static int tty_read(struct inode * inode, struct file * file, char * buf, int count)
 {
+	return read_chan(current->tty,file,buf,count);
 }
+
+static int ttyx_read(struct inode * inode, struct file * file, char * buf, int count)
+{
+	return read_chan(MINOR(inode->i_rdev),file,buf,count);
+}
+
+static int tty_write(struct inode * inode, struct file * file, char * buf, int count)
+{
+	return write_chan(current->tty,file,buf,count);
+}
+
+static int ttyx_write(struct inode * inode, struct file * file, char * buf, int count)
+{
+	return write_chan(MINOR(inode->i_rdev),file,buf,count);
+}
+
+static int tty_lseek(struct inode * inode, struct file * file, off_t offset, int orig)
+{
+	return -EBADF;
+}
+
+static int tty_readdir(struct inode * inode, struct file * file, struct dirent * de, int count)
+{
+	return -ENOTDIR;
+}
+
+static struct file_operations tty_fops = {
+	tty_lseek,
+	tty_read,
+	tty_write,
+	tty_readdir,
+	NULL,		/* tty_close */
+	NULL,		/* tty_select */
+	tty_ioctl	/* tty_ioctl */
+};
+
+static struct file_operations ttyx_fops = {
+	tty_lseek,
+	ttyx_read,
+	ttyx_write,
+	tty_readdir,
+	NULL,		/* ttyx_close */
+	NULL,		/* ttyx_select */
+	tty_ioctl	/* ttyx_ioctl */
+};
 
 void tty_init(void)
 {
 	int i;
 
+	chrdev_fops[4] = &ttyx_fops;
+	chrdev_fops[5] = &tty_fops;
 	for (i=0 ; i < QUEUES ; i++)
 		tty_queues[i] = (struct tty_queue) {0,0,0,0,""};
 	rs_queues[0] = (struct tty_queue) {0x3f8,0,0,0,""};
@@ -507,5 +555,4 @@ void tty_init(void)
 	rs_init();
 	printk("%d virtual consoles\n\r",NR_CONSOLES);
 	printk("%d pty's\n\r",NR_PTYS);
-	lp_init();
 }

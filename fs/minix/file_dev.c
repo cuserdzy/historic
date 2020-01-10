@@ -17,16 +17,16 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-int minix_readdir(struct inode * inode, struct file * filp, struct dirent * dirent)
+int minix_readdir(struct inode * inode, struct file * filp, struct dirent * dirent, int count)
 {
 	unsigned int block,offset,i;
 	char c;
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 
-	if (!S_ISDIR(inode->i_mode))
+	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
-	if (filp->f_pos & 15)
+	if (filp->f_pos & (sizeof (struct minix_dir_entry) - 1))
 		return -EBADF;
 	while (filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & 1023;
@@ -37,10 +37,10 @@ int minix_readdir(struct inode * inode, struct file * filp, struct dirent * dire
 		}
 		de = (struct minix_dir_entry *) (offset + bh->b_data);
 		while (offset < 1024 && filp->f_pos < inode->i_size) {
-			offset += 16;
-			filp->f_pos += 16;
+			offset += sizeof (struct minix_dir_entry);
+			filp->f_pos += sizeof (struct minix_dir_entry);
 			if (de->inode) {
-				for (i = 0; i < 14; i++)
+				for (i = 0; i < MINIX_NAME_LEN; i++)
 					if (c = de->name[i])
 						put_fs_byte(c,i+dirent->d_name);
 					else
@@ -65,6 +65,14 @@ int minix_file_read(struct inode * inode, struct file * filp, char * buf, int co
 	int read,left,chars,nr;
 	struct buffer_head * bh;
 
+	if (!inode) {
+		printk("minix_file_read: inode = NULL\n");
+		return -EINVAL;
+	}
+	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode))) {
+		printk("minix_file_read: mode = %07o\n",inode->i_mode);
+		return -EINVAL;
+	}
 	if (filp->f_pos > inode->i_size)
 		left = 0;
 	else
@@ -103,6 +111,14 @@ int minix_file_write(struct inode * inode, struct file * filp, char * buf, int c
 	struct buffer_head * bh;
 	char * p;
 
+	if (!inode) {
+		printk("minix_file_write: inode = NULL\n");
+		return -EINVAL;
+	}
+	if (!S_ISREG(inode->i_mode)) {
+		printk("minix_file_write: mode = %07o\n",inode->i_mode);
+		return -EINVAL;
+	}
 /*
  * ok, append may not work when many processes are writing at the same time
  * but so what. That way leads to madness anyway.
@@ -118,16 +134,19 @@ int minix_file_write(struct inode * inode, struct file * filp, char * buf, int c
 				written = -ENOSPC;
 			break;
 		}
-		if (!(bh=bread(inode->i_dev,block))) {
+		c = BLOCK_SIZE - (pos % BLOCK_SIZE);
+		if (c > count-written)
+			c = count-written;
+		if (c == BLOCK_SIZE)
+			bh = getblk(inode->i_dev, block);
+		else
+			bh = bread(inode->i_dev,block);
+		if (!bh) {
 			if (!written)
 				written = -EIO;
 			break;
 		}
-		c = pos % BLOCK_SIZE;
-		p = c + bh->b_data;
-		c = BLOCK_SIZE-c;
-		if (c > count-written)
-			c = count-written;
+		p = (pos % BLOCK_SIZE) + bh->b_data;
 		pos += c;
 		if (pos > inode->i_size) {
 			inode->i_size = pos;
@@ -136,6 +155,7 @@ int minix_file_write(struct inode * inode, struct file * filp, char * buf, int c
 		written += c;
 		memcpy_fromfs(p,buf,c);
 		buf += c;
+		bh->b_uptodate = 1;
 		bh->b_dirt = 1;
 		brelse(bh);
 	}

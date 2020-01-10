@@ -9,6 +9,7 @@
 
 void minix_put_inode(struct inode *inode)
 {
+	inode->i_size = 0;
 	minix_truncate(inode);
 	minix_free_inode(inode);
 }
@@ -41,9 +42,21 @@ struct inode_operations minix_inode_operations = {
  * the minix filesystem.
  */
 struct file_operations minix_file_operations = {
-	NULL,	/* lseek */
-	NULL,	/* read */
-	NULL,	/* write */
-	minix_readdir
+	NULL,			/* lseek - default */
+	minix_file_read,	/* read */
+	minix_file_write,	/* write */
+	NULL,			/* readdir - bad */
+	NULL,			/* close - default */
+	NULL,			/* select - default */
+	NULL			/* ioctl - default */
 };
 	
+struct file_operations minix_dir_operations = {
+	NULL,			/* lseek - default */
+	minix_file_read,	/* read */
+	NULL,			/* write - bad */
+	minix_readdir,		/* readdir */
+	NULL,			/* close - default */
+	NULL,			/* select - default */
+	NULL			/* ioctl - default */
+};

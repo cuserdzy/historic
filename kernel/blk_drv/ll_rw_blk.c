@@ -135,7 +135,7 @@ repeat:
 	if (rw == READ)
 		req = request+NR_REQUEST;
 	else
-		req = request+((NR_REQUEST*2)/3);
+		req = request+(NR_REQUEST/2);
 /* find an empty request */
 	cli();
 	while (--req >= request)

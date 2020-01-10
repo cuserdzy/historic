@@ -5,6 +5,15 @@
  */
 
 /*
+ * NOTE! This file no longer contains the low-level keyboard interrupt:
+ * that is now in kernel/sys_call.S. The reason is that the low-level
+ * interrupt must keep track of stack frames for signals etc.
+ *
+ * Thus it should be very easy to rewrite this in C - I just haven't
+ * bothered.
+ */
+
+/*
  *	Thanks to Alfred Leung for US keyboard patches
  *		Wolfgang Thiel for German keyboard patches
  *		Marc Corsini for the French keyboard
@@ -22,11 +31,14 @@
 
 .text
 .globl _hard_reset_now
-.globl _keyboard_interrupt
+.globl _do_keyboard_interrupt
+.globl _do_keyboard
 .globl _kapplic
 .globl _kmode
 .globl _kleds
 .globl _set_leds
+.globl _kraw
+.globl _ke0
 
 /*
  * these are for the keyboard read functions
@@ -41,24 +53,15 @@ buf = 16
 _kapplic:	.byte 0
 _kmode:	.byte 0		/* caps, alt, ctrl and shift mode */
 _kleds:	.byte 2		/* num-lock, caps, scroll-lock mode (nom-lock on) */
-e0:	.byte 0
+_ke0:	.byte 0
+_kraw:	.byte 0
 
 /*
- *  con_int is the real interrupt routine that reads the
+ *  do_keyboard is the real interrupt routine that reads the
  *  keyboard scan-code and converts it into the appropriate
  *  ascii character(s).
  */
-_keyboard_interrupt:
-	cld
-	pushl %eax
-	pushl %ebx
-	pushl %ecx
-	pushl %edx
-	push %ds
-	push %es
-	movl $0x10,%eax
-	mov %ax,%ds
-	mov %ax,%es
+_do_keyboard:
 	xorl %eax,%eax		/* %eax is scan code */
 	inb $0x60,%al
 	pushl %eax
@@ -77,7 +80,14 @@ _keyboard_interrupt:
 1:	jmp 1f
 1:	movb $0x20,%al
 	outb %al,$0x20
+	cmpb $0,_kraw
+	je 1f
+	xorl %ebx,%ebx		/* if raw kbd, just put scancode */
 	popl %eax
+	sti
+	call put_queue
+	jmp postkey
+1:	popl %eax
 	movl $1,%ebx
 	cmpb $0xE0,%al
 	je end_intr
@@ -86,17 +96,12 @@ _keyboard_interrupt:
 	je end_intr
 	sti
 	call key_table(,%eax,4)
+postkey:
 	call _do_keyboard_interrupt
 	movl $0,%ebx
 end_intr:
-	movb %bl,e0
-	pop %es
-	pop %ds
-	popl %edx
-	popl %ecx
-	popl %ebx
-	popl %eax
-	iret
+	movb %bl,_ke0
+	ret
 
 /*
  * This routine fills the buffer with max 8 bytes, taken from
@@ -129,7 +134,7 @@ put_queue:
 ctrl:	movb $0x04,%al
 	jmp 1f
 alt:	movb $0x10,%al
-1:	cmpb $0,e0
+1:	cmpb $0,_ke0
 	je 2f
 	addb %al,%al
 2:	orb %al,_kmode
@@ -137,7 +142,7 @@ alt:	movb $0x10,%al
 unctrl:	movb $0x04,%al
 	jmp 1f
 unalt:	movb $0x10,%al
-1:	cmpb $0,e0
+1:	cmpb $0,_ke0
 	je 2f
 	addb %al,%al
 2:	notb %al
@@ -215,7 +220,7 @@ cursor:
 	je cur2
 	testb $0x30,_kmode
 	jne _ctrl_alt_del
-cur2:	cmpb $0x01,e0		/* e0 forces cursor movement */
+cur2:	cmpb $0x01,_ke0		/* _ke0 forces cursor movement */
 	je cur
 	testb $0x03,_kmode	/* shift forces cursor */
 	jne cur
@@ -349,7 +354,7 @@ shift_map:
 
 alt_map:
 	.byte 0,0
-	.ascii "\0@\0$\0\0{[]}\\\0"
+	.ascii "\0@\243$\0\0{[]}\\\0"
 	.byte 0,0
 	.byte 0,0,0,0,0,0,0,0,0,0,0
 	.byte '~,13,0
@@ -433,7 +438,7 @@ key_map:
 
 shift_map:
 	.byte 0,27
-	.ascii "!\"#$%^&*()_+"
+	.ascii "!\"\243$%^&*()_+"
 	.byte 127,9
 	.ascii "QWERTYUIOP{}"
 	.byte 13,0
@@ -654,7 +659,7 @@ none:	ret
  * the scan code for slash means that the numeric keypad
  * slash was pushed.
  */
-slash:	cmpb $1,e0
+slash:	cmpb $1,_ke0
 	jne do_self
 	cmpb $1,_kapplic
 	jne notmapplic
@@ -676,7 +681,7 @@ notsapplic:
 	xorl %ebx,%ebx
 	jmp put_queue
 
-enter:	cmpb $1,e0
+enter:	cmpb $1,_ke0
 	jne do_self
 	cmpb $1,_kapplic
 	jne do_self

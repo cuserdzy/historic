@@ -9,7 +9,7 @@
 #include <linux/kernel.h>
 #include <asm/segment.h>
 
-#include <string.h>
+#include <linux/string.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <const.h>
@@ -323,7 +323,7 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 		iput(dir);
 		return -ENOSPC;
 	}
-	inode->i_size = 32;
+	inode->i_size = 2 * sizeof (struct minix_dir_entry);
 	inode->i_dirt = 1;
 	inode->i_mtime = inode->i_atime = CURRENT_TIME;
 	if (!(inode->i_data[0] = minix_new_block(inode->i_dev))) {
@@ -337,7 +337,7 @@ int minix_mkdir(struct inode * dir, const char * name, int len, int mode)
 		iput(dir);
 		inode->i_nlink--;
 		iput(inode);
-		return -ERROR;
+		return -EIO;
 	}
 	de = (struct minix_dir_entry *) dir_block->b_data;
 	de->inode=inode->i_ino;
@@ -529,7 +529,7 @@ int minix_symlink(struct inode * dir, const char * name, int len, const char * s
 		iput(dir);
 		inode->i_nlink--;
 		iput(inode);
-		return -ERROR;
+		return -EIO;
 	}
 	i = 0;
 	while (i < 1023 && (c=get_fs_byte(symname++)))

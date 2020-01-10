@@ -107,8 +107,3 @@ struct lp_struct lp_table[] = {
  */
 
 extern void lp_init(void);
-
-extern int lp_reset(int minor);
-extern int lp_char(char lpchar, int minor);
-extern int lp_write(unsigned minor, char *buf, int count);
-

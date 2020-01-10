@@ -4,7 +4,7 @@
  *  Written by Theodore Ts'o, 12/2/91
  */
 
-#include <string.h>
+#include <linux/string.h>
 
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -47,6 +47,16 @@ void do_rd_request(void)
 	goto repeat;
 }
 
+static struct file_operations rd_fops = {
+	NULL,			/* lseek - default */
+	block_read,		/* read - general block-dev read */
+	block_write,		/* write - general block-dev write */
+	NULL,			/* readdir - bad */
+	NULL,			/* close - default */
+	NULL,			/* select */
+	NULL			/* ioctl */
+};
+
 /*
  * Returns amount of memory which needs to be reserved.
  */
@@ -56,6 +66,7 @@ long rd_init(long mem_start, int length)
 	char	*cp;
 
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	blkdev_fops[MAJOR_NR] = &rd_fops;
 	rd_start = (char *) mem_start;
 	rd_length = length;
 	cp = rd_start;

@@ -12,7 +12,7 @@
 #include <linux/kernel.h>
 #include <asm/segment.h>
 
-#include <string.h>
+#include <linux/string.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <const.h>
@@ -248,8 +248,10 @@ int open_namei(const char * pathname, int flag, int mode,
 	}
 	inode->i_atime = CURRENT_TIME;
 	if (flag & O_TRUNC)
-		if (inode->i_op && inode->i_op->truncate)
+		if (inode->i_op && inode->i_op->truncate) {
+			inode->i_size = 0;
 			inode->i_op->truncate(inode);
+		}
 	*res_inode = inode;
 	return 0;
 }

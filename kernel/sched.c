@@ -46,21 +46,12 @@ void show_task(int nr,struct task_struct * p)
 
 void show_state(void)
 {
-	static int lock = 0;
 	int i;
 
-	cli();
-	if (lock) {
-		sti();
-		return;
-	}
-	lock = 1;
-	sti();
 	printk("\rTask-info:\n\r");
 	for (i=0 ; i<NR_TASKS ; i++)
 		if (task[i])
 			show_task(i,task[i]);
-	lock = 0;
 }
 
 #define LATCH (1193180/HZ)

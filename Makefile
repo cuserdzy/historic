@@ -8,8 +8,8 @@ MATH_EMULATION = -DKERNEL_MATH_EMULATION
 # uncomment the correct keyboard:
 #
 
-# KEYBOARD = -DKBD_FINNISH
-KEYBOARD = -DKBD_US
+KEYBOARD = -DKBD_FINNISH
+# KEYBOARD = -DKBD_US
 # KEYBOARD = -DKBD_GR
 # KEYBOARD = -DKBD_FR
 # KEYBOARD = -DKBD_UK
@@ -32,7 +32,7 @@ CFLAGS =-Wall -O6 -fomit-frame-pointer $(GCC_OPT)
 # default of FLOPPY is used by 'build'.
 #
 
-# ROOT_DEV = /dev/hdb1
+ROOT_DEV = /dev/hdb1
 
 #
 # if you want the ram-disk device, define this to be the
@@ -86,7 +86,7 @@ disk: Image
 	dd bs=8192 if=Image of=/dev/PS0
 
 tools/build: tools/build.c
-	$(CC) $(CFLAGS) \
+	$(CC) -static $(CFLAGS) \
 	-o tools/build tools/build.c
 
 boot/head.o: boot/head.s
@@ -159,15 +159,15 @@ dep:
 	(cd fs; make dep)
 	(cd kernel; make dep)
 	(cd mm; make dep)
+	(cd lib; make dep)
 
 dummy:
 
 ### Dependencies:
-init/main.o : init/main.c include/unistd.h include/sys/stat.h \
-  include/sys/types.h include/sys/time.h include/time.h include/sys/times.h \
-  include/sys/utsname.h include/sys/param.h include/sys/resource.h \
-  include/utime.h include/linux/tty.h include/termios.h include/linux/sched.h \
-  include/linux/head.h include/linux/fs.h include/sys/dirent.h \
-  include/limits.h include/linux/mm.h include/linux/kernel.h include/signal.h \
-  include/asm/system.h include/asm/io.h include/stddef.h include/stdarg.h \
-  include/fcntl.h include/string.h 
+init/main.o : init/main.c include/unistd.h include/sys/stat.h include/sys/types.h \
+  include/sys/time.h include/time.h include/sys/times.h include/sys/utsname.h \
+  include/sys/param.h include/sys/resource.h include/utime.h include/linux/sched.h \
+  include/linux/head.h include/linux/fs.h include/sys/dirent.h include/limits.h \
+  include/linux/mm.h include/linux/kernel.h include/signal.h include/linux/tty.h \
+  include/termios.h include/linux/string.h include/asm/system.h include/asm/io.h \
+  include/stddef.h include/stdarg.h include/fcntl.h 

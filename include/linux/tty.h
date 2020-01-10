@@ -119,17 +119,17 @@ extern unsigned long video_num_lines;
 */
 #define INIT_C_CC "\003\034\177\025\004\0\1\0\021\023\032\0\022\017\027\026\0"
 
-void rs_init(void);
-void con_init(void);
-void tty_init(void);
+extern void rs_init(void);
+extern void lp_init(void);
+extern void con_init(void);
+extern void tty_init(void);
 
-int tty_read(unsigned c, char * buf, int n, unsigned short flags);
-int tty_write(unsigned c, char * buf, int n);
+extern int tty_ioctl(struct inode *, struct file *, unsigned int, unsigned int);
 
-void con_write(struct tty_struct * tty);
-void rs_write(struct tty_struct * tty);
-void mpty_write(struct tty_struct * tty);
-void spty_write(struct tty_struct * tty);
+extern void rs_write(struct tty_struct * tty);
+extern void con_write(struct tty_struct * tty);
+extern void mpty_write(struct tty_struct * tty);
+extern void spty_write(struct tty_struct * tty);
 
 extern void serial_open(unsigned int line);
 

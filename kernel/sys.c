@@ -15,7 +15,7 @@
 #include <sys/utsname.h>
 #include <sys/param.h>
 #include <sys/resource.h>
-#include <string.h>
+#include <linux/string.h>
 
 /*
  * this indicates wether you can reboot with ctrl-alt-del: the deault is yes
@@ -29,6 +29,21 @@ static int C_A_D = 1;
 struct timezone sys_tz = { 0, 0};
 
 extern int session_of_pgrp(int pgrp);
+
+int sys_getpriority()
+{
+	return -ENOSYS;
+}
+
+int sys_setpriority()
+{
+	return -ENOSYS;
+}
+
+int sys_profil()
+{
+	return -ENOSYS;
+}
 
 int sys_ftime()
 {
@@ -378,7 +393,8 @@ int sys_uname(struct utsname * name)
 {
 	int i;
 
-	if (!name) return -ERROR;
+	if (!name)
+		return -EINVAL;
 	verify_area(name,sizeof *name);
 	for(i=0;i<sizeof *name;i++)
 		put_fs_byte(((char *) &thisname)[i],i+(char *) name);

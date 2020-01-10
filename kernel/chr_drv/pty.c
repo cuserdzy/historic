@@ -12,8 +12,9 @@
  *	void spty_write(struct tty_struct * queue);
  */
 
-#include <linux/tty.h>
 #include <linux/sched.h>
+#include <linux/tty.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 
