@@ -1,3 +1,9 @@
+/*
+ *  linux/kernel/chr_drv/tty_ioctl.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
 #include <errno.h>
 #include <termios.h>
 
@@ -5,8 +11,30 @@
 #include <linux/kernel.h>
 #include <linux/tty.h>
 
+#include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>
+
+static unsigned short quotient[] = {
+	0, 2304, 1536, 1047, 857,
+	768, 576, 384, 192, 96,
+	64, 48, 24, 12, 6, 3
+};
+
+static void change_speed(struct tty_struct * tty)
+{
+	unsigned short port,quot;
+
+	if (!(port = tty->read_q.data))
+		return;
+	quot = quotient[tty->termios.c_cflag & CBAUD];
+	cli();
+	outb_p(0x80,port+3);		/* set DLAB */
+	outb_p(quot & 0xff,port);	/* LS of divisor */
+	outb_p(quot >> 8,port+1);	/* MS of divisor */
+	outb(0x03,port+3);		/* reset DLAB */
+	sti();
+}
 
 static void flush(struct tty_queue * queue)
 {
@@ -41,6 +69,7 @@ static int set_termios(struct tty_struct * tty, struct termios * termios)
 
 	for (i=0 ; i< (sizeof (*termios)) ; i++)
 		((char *)&tty->termios)[i]=get_fs_byte(i+(char *)termios);
+	change_speed(tty);
 	return 0;
 }
 
@@ -62,6 +91,9 @@ static int get_termio(struct tty_struct * tty, struct termio * termio)
 	return 0;
 }
 
+/*
+ * This only works as the 386 is low-byt-first
+ */
 static int set_termio(struct tty_struct * tty, struct termio * termio)
 {
 	int i;
@@ -76,6 +108,7 @@ static int set_termio(struct tty_struct * tty, struct termio * termio)
 	tty->termios.c_line = tmp_termio.c_line;
 	for(i=0 ; i < NCC ; i++)
 		tty->termios.c_cc[i] = tmp_termio.c_cc[i];
+	change_speed(tty);
 	return 0;
 }
 
@@ -141,6 +174,11 @@ int tty_ioctl(int dev, int cmd, int arg)
 		case TIOCOUTQ:
 			verify_area((void *) arg,4);
 			put_fs_long(CHARS(tty->write_q),(unsigned long *) arg);
+			return 0;
+		case TIOCINQ:
+			verify_area((void *) arg,4);
+			put_fs_long(CHARS(tty->secondary),
+				(unsigned long *) arg);
 			return 0;
 		case TIOCSTI:
 			return -EINVAL; /* not implemented */

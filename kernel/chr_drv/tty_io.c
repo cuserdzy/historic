@@ -1,13 +1,24 @@
 /*
+ *  linux/kernel/tty_io.c
+ *
+ *  (C) 1991  Linus Torvalds
+ */
+
+/*
  * 'tty_io.c' gives an orthogonal feeling to tty's, be they consoles
- * or rs-channels. It also implements echoing, cooked mode etc (well,
- * not currently, but ...)
+ * or rs-channels. It also implements echoing, cooked mode etc.
+ *
+ * Kill-line thanks to John T Kohl.
  */
 #include <ctype.h>
 #include <errno.h>
 #include <signal.h>
 
 #define ALRMMASK (1<<(SIGALRM-1))
+#define KILLMASK (1<<(SIGKILL-1))
+#define INTMASK (1<<(SIGINT-1))
+#define QUITMASK (1<<(SIGQUIT-1))
+#define TSTPMASK (1<<(SIGTSTP-1))
 
 #include <linux/sched.h>
 #include <linux/tty.h>
@@ -39,10 +50,10 @@
 
 struct tty_struct tty_table[] = {
 	{
-		{0,
+		{ICRNL,		/* change incoming CR to NL */
 		OPOST|ONLCR,	/* change outgoing NL to CRNL */
 		0,
-		ICANON | ECHO | ECHOCTL | ECHOKE,
+		ISIG | ICANON | ECHO | ECHOCTL | ECHOKE,
 		0,		/* console termio */
 		INIT_C_CC},
 		0,			/* initial pgrp */
@@ -52,8 +63,8 @@ struct tty_struct tty_table[] = {
 		{0,0,0,0,""},		/* console write-queue */
 		{0,0,0,0,""}		/* console secondary queue */
 	},{
-		{0, /*IGNCR*/
-		OPOST | ONLRET,		/* change outgoing NL to CR */
+		{0, /* no translation */
+		0,  /* no translation */
 		B2400 | CS8,
 		0,
 		0,
@@ -65,8 +76,8 @@ struct tty_struct tty_table[] = {
 		{0x3f8,0,0,0,""},
 		{0,0,0,0,""}
 	},{
-		{0, /*IGNCR*/
-		OPOST | ONLRET,		/* change outgoing NL to CR */
+		{0, /* no translation */
+		0,  /* no translation */
 		B2400 | CS8,
 		0,
 		0,
@@ -97,7 +108,7 @@ void tty_init(void)
 	con_init();
 }
 
-void tty_intr(struct tty_struct * tty, int signal)
+void tty_intr(struct tty_struct * tty, int mask)
 {
 	int i;
 
@@ -105,7 +116,7 @@ void tty_intr(struct tty_struct * tty, int signal)
 		return;
 	for (i=0;i<NR_TASKS;i++)
 		if (task[i] && task[i]->pgrp==tty->pgrp)
-			task[i]->signal |= 1<<(signal-1);
+			task[i]->signal |= mask;
 }
 
 static void sleep_if_empty(struct tty_queue * queue)
@@ -126,6 +137,11 @@ static void sleep_if_full(struct tty_queue * queue)
 	sti();
 }
 
+void wait_for_keypress(void)
+{
+	sleep_if_empty(&tty_table[0].secondary);
+}
+
 void copy_to_cooked(struct tty_struct * tty)
 {
 	signed char c;
@@ -143,6 +159,21 @@ void copy_to_cooked(struct tty_struct * tty)
 		if (I_UCLC(tty))
 			c=tolower(c);
 		if (L_CANON(tty)) {
+			if (c==KILL_CHAR(tty)) {
+				/* deal with killing the input line */
+				while(!(EMPTY(tty->secondary) ||
+				        (c=LAST(tty->secondary))==10 ||
+				        c==EOF_CHAR(tty))) {
+					if (L_ECHO(tty)) {
+						if (c<32)
+							PUTCH(127,tty->write_q);
+						PUTCH(127,tty->write_q);
+						tty->write(tty);
+					}
+					DEC(tty->secondary.head);
+				}
+				continue;
+			}
 			if (c==ERASE_CHAR(tty)) {
 				if (EMPTY(tty->secondary) ||
 				   (c=LAST(tty->secondary))==10 ||
@@ -166,9 +197,13 @@ void copy_to_cooked(struct tty_struct * tty)
 				continue;
 			}
 		}
-		if (!L_ISIG(tty)) {
+		if (L_ISIG(tty)) {
 			if (c==INTR_CHAR(tty)) {
-				tty_intr(tty,SIGINT);
+				tty_intr(tty,INTMASK);
+				continue;
+			}
+			if (c==QUIT_CHAR(tty)) {
+				tty_intr(tty,QUITMASK);
 				continue;
 			}
 		}
@@ -202,8 +237,8 @@ int tty_read(unsigned channel, char * buf, int nr)
 	if (channel>2 || nr<0) return -1;
 	tty = &tty_table[channel];
 	oldalarm = current->alarm;
-	time = (unsigned) 10*tty->termios.c_cc[VTIME];
-	minimum = (unsigned) tty->termios.c_cc[VMIN];
+	time = 10L*tty->termios.c_cc[VTIME];
+	minimum = tty->termios.c_cc[VMIN];
 	if (time && !minimum) {
 		minimum=1;
 		if (flag=(!oldalarm || time+jiffies<oldalarm))
@@ -299,8 +334,16 @@ int tty_write(unsigned channel, char * buf, int nr)
  * hate intel for all time :-). We'll have to
  * be careful and see to reinstating the interrupt
  * chips before calling this, though.
+ *
+ * I don't think we sleep here under normal circumstances
+ * anyway, which is good, as the task sleeping might be
+ * totally innocent.
  */
 void do_tty_interrupt(int tty)
 {
 	copy_to_cooked(tty_table+tty);
+}
+
+void chr_dev_init(void)
+{
 }
